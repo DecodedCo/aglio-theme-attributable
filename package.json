@@ -1,0 +1,28 @@
+{
+  "name": "aglio-theme-hello",
+  "version": "1.0.0",
+  "description": "Starting point for Aglio themes",
+  "main": "theme.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danielgtaylor/aglio-theme-hello.git"
+  },
+  "keywords": [
+    "algio",
+    "theme",
+    "api",
+    "blueprint"
+  ],
+  "author": "Daniel G. Taylor",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/danielgtaylor/aglio-theme-hello/issues"
+  },
+  "homepage": "https://github.com/danielgtaylor/aglio-theme-hello",
+  "devDependencies": {
+    "mocha": "^2.1.0"
+  }
+}
