@@ -387,7 +387,7 @@ exports.getConfig = ->
       description: 'Layout style name or path to custom stylesheet'
   ]
 
-exports.render ->
+exports.render = ->
   slugCache =
     _nav: []
 

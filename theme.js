@@ -474,7 +474,7 @@
     };
   };
 
-  exports.render(function() {
+  exports.render = function() {
     var md, slugCache, themeStyle, themeVariables, verbose;
     slugCache = {
       _nav: []
@@ -541,7 +541,7 @@
         return done(null, html);
       });
     });
-  });
+  };
 
   module.exports = exports;
 
