@@ -1,14 +1,14 @@
 {
-  "name": "aglio-theme-hello",
+  "name": "aglio-theme-wealthbox",
   "version": "1.0.0",
-  "description": "Starting point for Aglio themes",
+  "description": "Aglio theme to render Wealthbox CRM's API blueprint",
   "main": "theme.js",
   "scripts": {
     "test": "mocha"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/danielgtaylor/aglio-theme-hello.git"
+    "url": "https://github.com/gothamtechlabs/aglio-theme-wealthbox.git"
   },
   "keywords": [
     "algio",
@@ -16,12 +16,25 @@
     "api",
     "blueprint"
   ],
-  "author": "Daniel G. Taylor",
+  "author": "Joseph C. DelCioppio",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/danielgtaylor/aglio-theme-hello/issues"
+    "url": "https://github.com/gothamtechlabs/aglio-theme-wealthbox/issues"
   },
-  "homepage": "https://github.com/danielgtaylor/aglio-theme-hello",
+  "homepage": "https://github.com/gothamtechlabs/aglio-theme-wealthbox",
+  "dependencies": {
+    "coffee-script": "^1.8.0",
+    "highlight.js": "^8.4.0",
+    "jade": "^1.8.2",
+    "less": "^2.1.2",
+    "markdown-it": "^4.3.0",
+    "markdown-it-anchor": "^2.1.0",
+    "markdown-it-checkbox": "^1.1.0",
+    "markdown-it-container": "^1.0.0",
+    "markdown-it-emoji": "^1.0.0",
+    "moment": "^2.8.4",
+    "stylus": "^0.51.1"
+  },
   "devDependencies": {
     "mocha": "^2.1.0"
   }
