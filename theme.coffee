@@ -9,6 +9,7 @@ crypto      = require 'crypto'
 fs          = require 'fs'
 ROOT        = path.dirname(__dirname)
 cache       = {}
+exports     = {}
 
 errMsg = (message, err) ->
   err.message = "#{message}: #{err.message}"
@@ -448,3 +449,5 @@ exports.render ->
         done(errMsg('Error calling template during rendering', _error))
 
       done(null, html)
+
+ module.exports = exports
