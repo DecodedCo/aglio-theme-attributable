@@ -1,14 +1,14 @@
 {
-  "name": "aglio-theme-wealthbox",
-  "version": "1.1.2",
-  "description": "Aglio theme to render Wealthbox CRM's API blueprint",
+  "name": "aglio-theme-attributable",
+  "version": "0.0.1",
+  "description": "Aglio theme to render attributes as well",
   "main": "theme.js",
   "scripts": {
     "test": "mocha"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/gothamtechlabs/aglio-theme-wealthbox.git"
+    "url": "https://github.com/gothamtechlabs/aglio-theme-attributable.git"
   },
   "keywords": [
     "algio",
@@ -19,9 +19,9 @@
   "author": "Joseph C. DelCioppio",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/gothamtechlabs/aglio-theme-wealthbox/issues"
+    "url": "https://github.com/gothamtechlabs/aglio-theme-attributable/issues"
   },
-  "homepage": "https://github.com/gothamtechlabs/aglio-theme-wealthbox",
+  "homepage": "https://github.com/gothamtechlabs/aglio-theme-attributable",
   "dependencies": {
     "coffee-script": "^1.8.0",
     "highlight.js": "^8.4.0",

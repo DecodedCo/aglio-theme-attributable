@@ -10,6 +10,7 @@ fs          = require 'fs'
 ROOT        = path.dirname(__dirname)
 cache       = {}
 exports     = {}
+slugify     = null
 
 errMsg = (message, err) ->
   err.message = "#{message}: #{err.message}"
@@ -306,7 +307,7 @@ decorateParameters = (parameters) ->
 
   results.reverse()
 
-decorateAction = (action) ->
+decorateAction = (action, resource, resourceGroup) ->
   action.elementId   = slugify(resourceGroup.name + "-" + resource.name + "-" + action.method, true);
   action.elementLink = "#" + action.elementId;
   action.methodLower = action.method.toLowerCase();
@@ -324,13 +325,13 @@ decorateAction = (action) ->
 
   results
 
-decorateResource =  (resource) ->
-  resource.elementId   = slugify(resourceGroup.name + "-" + resource.name, true);
-  resource.elementLink = "#" + resource.elementId;
+decorateResource =  (resource, resourceGroup) ->
+  resource.elementId   = slugify "#{resourceGroup.name}-#{resource.name}", true
+  resource.elementLink = "#" + resource.elementId
   actions              = resource.actions || []
   results              = []
 
-  results.push decorateAction(action) for action in actions
+  results.push decorateAction(action, resource, resourceGroup) for action in actions
 
   results
 
@@ -338,7 +339,7 @@ decorateResourceGroup = (resourceGroup) ->
   resources = resourceGroup.resources || []
   results   = []
 
-  results.push decorateResource(resource) for resource in resources
+  results.push decorateResource(resource, resourceGroup) for resource in resources
 
   results
 
@@ -387,7 +388,7 @@ exports.getConfig = ->
       description: 'Layout style name or path to custom stylesheet'
   ]
 
-exports.render = ->
+exports.render = (input, options, done) ->
   slugCache =
     _nav: []
 
