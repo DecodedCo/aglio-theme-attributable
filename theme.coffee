@@ -103,7 +103,8 @@ getCss = (variables, styles, verbose, done) ->
   stylePaths = [];
 
   for style in styles
-    customPath = path.join(ROOT, 'styles', "layout-#{item}.less")
+    debugger
+    customPath = path.join(ROOT, 'styles', "layout-#{style}.less")
 
     done new Error("#{style} does not exist!") if !fs.existsSync(customPath) and !fs.existsSync(style)
 
@@ -217,7 +218,7 @@ modifyUriTemplate = (templateUri, parameters) ->
   lastIndex       = 0
   index           = 0
 
-  while (index = templateUri.indexOf("{", index) != -1)
+  while (index = templateUri.indexOf("{", index)) != -1
 
     parameterBlocks.push templateUri.substring(lastIndex, index)
     block = {}
@@ -279,7 +280,7 @@ decoratePayloadItem = (item) ->
   results
 
 decoratePayload = (payload, example) ->
-  payloadItems = example[name] || []
+  payloadItems = example[payload] || []
   results  = []
 
   results.push(decoratePayloadItem(item)) for item in payloadItems
@@ -308,6 +309,7 @@ decorateParameters = (parameters) ->
   results.reverse()
 
 decorateAction = (action, resource, resourceGroup) ->
+  results            = []
   action.elementId   = slugify(resourceGroup.name + "-" + resource.name + "-" + action.method, true);
   action.elementLink = "#" + action.elementId;
   action.methodLower = action.method.toLowerCase();
@@ -389,6 +391,23 @@ exports.getConfig = ->
   ]
 
 exports.render = (input, options, done) ->
+  unless done?
+    done    = options
+    options = {}
+
+  cache                    = {}                  if process.env.NOCACHE?
+  options.themeCondenseNav = options.condenseNav if options.condenseNav?
+  options.themeFullWidth   = options.fullWidth   if options.fullWidth?
+  options.themeVariables   = 'default'           unless options.themeVariables?
+  options.themeStyle       = 'default'           unless options.themeStyle?
+  options.themeTemplate    = 'default'           unless options.themeTemplate?
+  options.themeCondenseNav = true                unless options.themeCondenseNav?
+  options.themeFullWidth   = false               unless options.themeFullWidth?
+
+  options.themeTemplate    = path.join(ROOT, 'templates', 'index.jade') if options.themeTemplate is 'default'
+
+  debugger
+
   slugCache =
     _nav: []
 
