@@ -1,10 +1,18 @@
 {
   "name": "aglio-theme-attributable",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Aglio theme to render attributes as well",
-  "main": "theme.js",
+  "main": "main.js",
   "scripts": {
-    "test": "mocha"
+    "build": "coffeelint src/*.coffee && coffee -o lib -c src",
+    "precoverage": "npm run build",
+    "coverage": "istanbul cover -x cache/*.js _mocha -- --compilers coffee:coffee-script/register -R spec",
+    "precoveralls": "npm run coverage",
+    "coveralls": "coveralls <coverage/lcov.info",
+    "pretest": "npm run build",
+    "test": "mocha --compilers coffee:coffee-script/register",
+    "prepublish": "npm run build",
+    "postinstall": "node scripts/setup-cache.js"
   },
   "repository": {
     "type": "git",

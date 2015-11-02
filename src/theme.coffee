@@ -7,7 +7,7 @@ path        = require 'path'
 querystring = require 'querystring'
 crypto      = require 'crypto'
 fs          = require 'fs'
-ROOT        = path.dirname(__dirname)
+ROOT        = path.dirname(__filename)
 cache       = {}
 exports     = {}
 slugify     = null
@@ -103,7 +103,6 @@ getCss = (variables, styles, verbose, done) ->
   stylePaths = [];
 
   for style in styles
-    debugger
     customPath = path.join(ROOT, 'styles', "layout-#{style}.less")
 
     done new Error("#{style} does not exist!") if !fs.existsSync(customPath) and !fs.existsSync(style)
@@ -405,8 +404,6 @@ exports.render = (input, options, done) ->
   options.themeFullWidth   = false               unless options.themeFullWidth?
 
   options.themeTemplate    = path.join(ROOT, 'templates', 'index.jade') if options.themeTemplate is 'default'
-
-  debugger
 
   slugCache =
     _nav: []
