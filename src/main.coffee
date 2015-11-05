@@ -103,7 +103,6 @@ getCss = (variables, styles, verbose, done) ->
   stylePaths = [];
 
   for style in styles
-    debugger
     customPath = path.join(ROOT, 'styles', "layout-#{style}.less")
 
     done new Error("#{style} does not exist!") if !fs.existsSync(customPath) and !fs.existsSync(style)
@@ -295,11 +294,17 @@ decorateExample = (example) ->
 
   results
 
-decorateParameters = (parameters) ->
-  results     = []
+decorateParameters = (parameters, parent_resource) ->
+  results         = []
   knownParameters = {}
+  parameters      = if !parameters || !parameters.length
+                      parent_resource.parameters
+                    else if parent_resource.parameters
+                      parent_resource.parameters.concat(parameters)
 
-  for parameter in parameters
+  reversedParams  = (parameters || []).concat([]).reverse()
+
+  for parameter in reversedParams
     continue if knownParameters[parameter.name]
 
     knownParameters[parameter.name] = true
@@ -308,19 +313,49 @@ decorateParameters = (parameters) ->
 
   results.reverse()
 
+buildAttribute = (attribute) ->
+  values = attribute?.content?.value?.content || []
+
+  values =  if typeof(values) is 'string'
+              [{ value: values }]
+            else
+              values.map (value) ->
+                { value: value.content }
+
+  {
+    name:         attribute?.content?.key?.content || '',
+    type:         attribute?.content?.value?.element || '',
+    required:     attribute?.attributes?.typeAttributes.indexOf('required') != -1,
+    default:      attribute?.content?.value?.attributes?.default[0]?.content || '',
+    example:      attribute?.content?.value?.attributes?.samples?[0]?[0]?.content || '',
+    description:  attribute?.meta?.description,
+    values:       values.map (value) ->
+                    { value: value.content }
+  }
+
+decorateAttributes = (action, parent_resource) ->
+  results         = []
+  knownAttributes = []
+  attributes      = action?.content?[0]?.content?[0]?.content || []
+
+  for attribute in attributes
+    attribute = buildAttribute(attribute)
+
+    continue if knownAttributes[attribute.name]
+
+    knownAttributes[attribute.name] = true
+
+    results.push(attribute)
+
+  results
+
 decorateAction = (action, resource, resourceGroup) ->
   results            = []
   action.elementId   = slugify(resourceGroup.name + "-" + resource.name + "-" + action.method, true);
   action.elementLink = "#" + action.elementId;
   action.methodLower = action.method.toLowerCase();
-
-  action.parameters  = if !action.parameters || !action.parameters.length
-                         resource.parameters
-                       else if resource.parameters
-                         resource.parameters.concat(action.parameters)
-
-  reversedParams     = (action.parameters || []).concat([]).reverse()
-  action.parameters  = decorateParameters(reversedParams)
+  action.parameters  = decorateParameters(action.parameters, resource)
+  action.attributes  = decorateAttributes(action, resource)
   action.uriTemplate = modifyUriTemplate((action.attributes || {}).uriTemplate || resource.uriTemplate || '', action.parameters);
 
   results.push decorateExample(example) for example in action.examples
@@ -405,8 +440,6 @@ exports.render = (input, options, done) ->
   options.themeFullWidth   = false               unless options.themeFullWidth?
 
   options.themeTemplate    = path.join(ROOT, 'templates', 'index.jade') if options.themeTemplate is 'default'
-
-  debugger
 
   slugCache =
     _nav: []
