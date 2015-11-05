@@ -103,6 +103,7 @@ getCss = (variables, styles, verbose, done) ->
   stylePaths = [];
 
   for style in styles
+    debugger
     customPath = path.join(ROOT, 'styles', "layout-#{style}.less")
 
     done new Error("#{style} does not exist!") if !fs.existsSync(customPath) and !fs.existsSync(style)
@@ -405,6 +406,8 @@ exports.render = (input, options, done) ->
 
   options.themeTemplate    = path.join(ROOT, 'templates', 'index.jade') if options.themeTemplate is 'default'
 
+  debugger
+
   slugCache =
     _nav: []
 
@@ -458,7 +461,7 @@ exports.render = (input, options, done) ->
       locals[key] = value
 
     getTemplate options.themeTemplate, verbose, (getTemplateErr, renderer) ->
-      return done(errMsg('Could not get template', getTemplateErr)) ifgetTemplateErr
+      return done(errMsg('Could not get template', getTemplateErr)) if getTemplateErr
 
       try
         html = renderer locals
