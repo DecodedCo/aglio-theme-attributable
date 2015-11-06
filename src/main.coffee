@@ -497,6 +497,8 @@ exports.render = (input, options, done) ->
     getTemplate options.themeTemplate, verbose, (getTemplateErr, renderer) ->
       return done(errMsg('Could not get template', getTemplateErr)) if getTemplateErr
 
+      debugger
+
       try
         html = renderer locals
       catch _error
