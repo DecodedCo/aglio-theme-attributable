@@ -260,39 +260,34 @@ modifyUriTemplate = (templateUri, parameters) ->
                  .replace(/\/+/g, '/')
                  .replace(/\/$/, '')
 
-decoratePayloadItem = (item) ->
+decoratePayload = (payload) ->
   results  = []
 
-  item.hasContent = item.description || Object.keys(item.headers).length || item.body || item.schema
+  payload.hasContent = payload.description ||
+                       Object.keys(payload.headers).length ||
+                       payload.body ||
+                       payload.schema ||
 
   try
-    item.body = JSON.stringify(JSON.parse(item.body), null, 2) if item.body
-
-    if item.schema
-      results.push(item.schema = JSON.stringify(JSON.parse(item.schema), null, 2))
-    else
-      results.push(null)
-
+    payload.body   = JSON.stringify(JSON.parse(payload.body), null, 2)   if payload.body
+    payload.schema = JSON.stringify(JSON.parse(payload.schema), null, 2) if payload.schema
   catch _error
-    results.push(false)
+    payload
 
-  results
+  payload
 
-decoratePayload = (payload, example) ->
-  payloadItems = example[payload] || []
+decoratePayloads = (payloads, example) ->
   results  = []
 
-  results.push(decoratePayloadItem(item)) for item in payloadItems
+  results.push(decoratePayload(payload)) for payload in payloads
 
   results
 
 decorateExample = (example) ->
-  payloads = ['requests', 'responses'];
-  results = []
+  for payload in ['requests', 'responses']
+    example[payload] = decoratePayloads(example[payload] || [], example)
 
-  results.push(decoratePayload(payload, example)) for payload in payloads
-
-  results
+  example
 
 decorateParameters = (parameters, parent_resource) ->
   results         = []
@@ -360,7 +355,9 @@ decorateAction = (action, resource, resourceGroup) ->
 
   results.push decorateExample(example) for example in action.examples
 
-  results
+  action.examples = results
+
+  action
 
 decorateResource =  (resource, resourceGroup) ->
   resource.elementId   = slugify "#{resourceGroup.name}-#{resource.name}", true
@@ -370,7 +367,9 @@ decorateResource =  (resource, resourceGroup) ->
 
   results.push decorateAction(action, resource, resourceGroup) for action in actions
 
-  results
+  resource.actions = results
+
+  resource
 
 decorateResourceGroup = (resourceGroup) ->
   resources = resourceGroup.resources || []
@@ -378,7 +377,9 @@ decorateResourceGroup = (resourceGroup) ->
 
   results.push decorateResource(resource, resourceGroup) for resource in resources
 
-  results
+  resourceGroup.resources = results
+
+  resourceGroup
 
 decorateResourceGroups = (resourceGroups) ->
   results = []
