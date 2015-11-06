@@ -311,11 +311,11 @@ decorateParameters = (parameters, parent_resource) ->
 buildAttribute = (attribute) ->
   values = attribute?.content?.value?.content || []
 
-  values =  if typeof(values) is 'string'
-              [{ value: values }]
-            else
+  values =  if values.map
               values.map (value) ->
                 { value: value.content }
+            else
+              [{ value: values }]
 
   {
     name:         attribute?.content?.key?.content || '',
@@ -329,9 +329,14 @@ buildAttribute = (attribute) ->
   }
 
 decorateAttributes = (action, parent_resource) ->
-  results         = []
-  knownAttributes = []
-  attributes      = action?.content?[0]?.content?[0]?.content || []
+  results            = []
+  knownAttributes    = []
+  actionAttributes   = action?.content?[0]?.content?[0]?.content || []
+  resourceAttributes = parent_resource?.content?[0]?.content?[0]?.content || []
+  attributes         =  if !actionAttributes.length
+                          resourceAttributes
+                        else if resourceAttributes.length
+                          resourceAttributes.concat(actionAttributes)
 
   for attribute in attributes
     attribute = buildAttribute(attribute)
@@ -496,8 +501,6 @@ exports.render = (input, options, done) ->
 
     getTemplate options.themeTemplate, verbose, (getTemplateErr, renderer) ->
       return done(errMsg('Could not get template', getTemplateErr)) if getTemplateErr
-
-      debugger
 
       try
         html = renderer locals
