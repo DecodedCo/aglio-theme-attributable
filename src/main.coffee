@@ -266,7 +266,7 @@ decoratePayload = (payload) ->
   payload.hasContent = payload.description ||
                        Object.keys(payload.headers).length ||
                        payload.body ||
-                       payload.schema ||
+                       payload.schema
 
   try
     payload.body   = JSON.stringify(JSON.parse(payload.body), null, 2)   if payload.body
@@ -310,23 +310,27 @@ decorateParameters = (parameters, parent_resource) ->
 
 buildAttribute = (attribute) ->
   values = attribute?.content?.value?.content || []
+  type   = attribute?.content?.value?.element || ''
 
-  values =  if values.map
-              values.map (value) ->
-                { value: value.content }
-            else
-              [{ value: values }]
-
-  {
+  decoratedAttribute =
     name:         attribute?.content?.key?.content || '',
-    type:         attribute?.content?.value?.element || '',
-    required:     attribute?.attributes?.typeAttributes.indexOf('required') != -1,
-    default:      attribute?.content?.value?.attributes?.default[0]?.content || '',
-    example:      attribute?.content?.value?.attributes?.samples?[0]?[0]?.content || '',
+    type:         type,
+    required:     (attribute?.attributes?.typeAttributes.indexOf('required') != -1),
+    default:      attribute?.content?.value?.attributes?.default?[0]?.content || '',
     description:  attribute?.meta?.description,
-    values:       values.map (value) ->
-                    { value: value.content }
-  }
+
+  switch type
+    when 'object'
+      decoratedAttribute.example = ''
+      decoratedAttribute.values  = values.map((attribute) -> buildAttribute(attribute))
+    when 'enum'
+      decoratedAttribute.example = attribute?.content?.value?.attributes?.samples?[0]?[0]?.content
+      decoratedAttribute.values  = values.map((value) -> { value: value.content })
+    else
+      decoratedAttribute.example = attribute?.content?.value?.content || ''
+      decoratedAttribute.values  = []
+
+  decoratedAttribute
 
 decorateAttributes = (action, parent_resource) ->
   results            = []
@@ -339,13 +343,13 @@ decorateAttributes = (action, parent_resource) ->
                           resourceAttributes.concat(actionAttributes)
 
   for attribute in attributes
-    attribute = buildAttribute(attribute)
+    decoratedAttribute = buildAttribute(attribute)
 
-    continue if knownAttributes[attribute.name]
+    continue if knownAttributes[decoratedAttribute.name]
 
-    knownAttributes[attribute.name] = true
+    knownAttributes[decoratedAttribute.name] = true
 
-    results.push(attribute)
+    results.push(decoratedAttribute)
 
   results
 
