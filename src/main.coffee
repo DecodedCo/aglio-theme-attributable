@@ -341,6 +341,8 @@ decorateAttributes = (action, parent_resource) ->
                           resourceAttributes
                         else if resourceAttributes.length
                           resourceAttributes.concat(actionAttributes)
+                        else
+                          []
 
   for attribute in attributes
     decoratedAttribute = buildAttribute(attribute)

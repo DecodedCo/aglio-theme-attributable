@@ -1,6 +1,6 @@
 {
   "name": "aglio-theme-attributable",
-  "version": "1.2.0",
+  "version": "1.2.3",
   "description": "Aglio theme to render attributes as well",
   "main": "lib/main.js",
   "scripts": {
