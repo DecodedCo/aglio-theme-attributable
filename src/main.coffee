@@ -1,117 +1,148 @@
-markdownIt  = require 'markdown-it'
-hljs        = require 'highlight.js'
-jade        = require 'jade'
-less        = require 'less'
-moment      = require 'moment'
-path        = require 'path'
+crypto = require 'crypto'
+fs = require 'fs'
+hljs = require 'highlight.js'
+jade = require 'jade'
+less = require 'less'
+markdownIt = require 'markdown-it'
+moment = require 'moment'
+path = require 'path'
 querystring = require 'querystring'
-crypto      = require 'crypto'
-fs          = require 'fs'
-ROOT        = path.dirname(__dirname)
-cache       = {}
-exports     = {}
-slugify     = null
 
+renderExample = require './example'
+renderSchema = require './schema'
+
+# The root directory of this project
+ROOT = path.dirname __dirname
+
+cache = {}
+
+# Utility for benchmarking
+benchmark =
+  start: (message) -> if process.env.BENCHMARK then console.time message
+  end: (message) -> if process.env.BENCHMARK then console.timeEnd message
+
+# Extend an error's message. Returns the modified error.
 errMsg = (message, err) ->
   err.message = "#{message}: #{err.message}"
-  err
+  return err
 
+# Generate a SHA1 hash
 sha1 = (value) ->
-  crypto.createHash('sha1')
-        .update(value.toString())
-        .digest('hex')
+  crypto.createHash('sha1').update(value.toString()).digest('hex')
 
-highlight = (code, lang, subset) ->
-  (->
-    switch lang
-      when 'no-highlight' then code
-      when null           then hljs.highlightAuto(code, subset).value;
-      when ''             then hljs.highlightAuto(code, subset).value;
-      else                     hljs.highlight(lang, code).value;
-  )().trim()
-
-slug = (cache, value, unique) ->
-  cache  = {}    if cache  is null
-  value  = ''    if value  is null
-  unique = false if unique is null
-
+# A function to create ID-safe slugs. If `unique` is passed, then
+# unique slugs are returned for the same input. The cache is just
+# a plain object where the keys are the sluggified name.
+slug = (cache={}, value='', unique=false) ->
   sluggified = value.toLowerCase()
-                    .replace(/[ \t\n\\<>"'=:\/]/g, '-')
+                    .replace(/[ \t\n\\<>"'=:/]/g, '-')
                     .replace(/-+/g, '-')
                     .replace(/^-/, '')
 
   if unique
     while cache[sluggified]
-      sluggified = if sluggified.match(/\d+$/)
-                     sluggified.replace /\d+$/, (value) ->
-                      parseInt(value) + 1
-                   else
-                     sluggified + '-1'
+      # Already exists, so let's try to make it unique.
+      if sluggified.match /\d+$/
+        sluggified = sluggified.replace /\d+$/, (value) ->
+          parseInt(value) + 1
+      else
+        sluggified = sluggified + '-1'
 
   cache[sluggified] = true
-  sluggified
+
+  return sluggified
+
+# A function to highlight snippets of code. lang is optional and
+# if given, is used to set the code language. If lang is no-highlight
+# then no highlighting is performed.
+highlight = (code, lang, subset) ->
+  benchmark.start "highlight #{lang}"
+  response = switch lang
+    when 'no-highlight' then code
+    when undefined, null, ''
+      hljs.highlightAuto(code, subset).value
+    else hljs.highlight(lang, code).value
+  benchmark.end "highlight #{lang}"
+  return response.trim()
 
 getCached = (key, compiledPath, sources, load, done) ->
-  return done(null)             if (process.env.NOCACHE)
-  return done(null, cache[key]) if (cache[key])
+  # Disable the template/css caching?
+  if process.env.NOCACHE then return done null
 
+  # Already loaded? Just return it!
+  if cache[key] then return done null, cache[key]
+
+  # Next, try to check if the compiled path exists and is newer than all of
+  # the sources. If so, load the compiled path into the in-memory cache.
   try
-    if fs.existsSync(compiledPath)
-      compiledStats = fs.statSync(compiledPath)
+    if fs.existsSync compiledPath
+      compiledStats = fs.statSync compiledPath
 
       for source in sources
-        sourceStats = fs.statSync(source)
-
-        done(null) if sourceStats.mtime > compiledStats.mtime
+        sourceStats = fs.statSync source
+        if sourceStats.mtime > compiledStats.mtime
+          # There is a newer source file, so we ignore the compiled
+          # version on disk. It'll be regenerated later.
+          return done null
 
       try
         load compiledPath, (err, item) ->
-          done(errMsg('Error loading cached resource', err)) if err
+          if err then return done(errMsg 'Error loading cached resource', err)
 
           cache[key] = item
-
-          done(null, cache[key])
-      catch _error
-        done errMsg('Error loading cached resource', _error)
+          done null, cache[key]
+      catch loadErr
+        return done(errMsg 'Error loading cached resource', loadErr)
     else
-      done(null)
-  catch _error
-    done _error
+      done null
+  catch err
+    done err
 
 getCss = (variables, styles, verbose, done) ->
+  # Get the CSS for the given variables and style. This method caches
+  # its output, so subsequent calls will be extremely fast but will
+  # not reload potentially changed data from disk.
+  # The CSS is generated via a dummy LESS file with imports to the
+  # default variables, any custom override variables, and the given
+  # layout style. Both variables and style support special values,
+  # for example `flatly` might load `styles/variables-flatly.less`.
+  # See the `styles` directory for available options.
   key = "css-#{variables}-#{styles}"
+  if cache[key] then return done null, cache[key]
 
-  return done(null, cache[key]) if (cache[key])
+  # Not cached in memory, but maybe it's already compiled on disk?
+  compiledPath = path.join ROOT, 'cache',
+    "#{sha1 key}.css"
 
-  compiledPath        = path.join(ROOT, 'cache', "#{sha1(key)}.css")
-  defaultVariablePath = path.join(ROOT, 'styles', 'variables-default.less')
-  variablePaths       = [defaultVariablePath];
-  sources             = [defaultVariablePath]
+  defaultVariablePath = path.join ROOT, 'styles', 'variables-default.less'
+  sources = [defaultVariablePath]
 
-  variables           = [variables] if !Array.isArray(variables)
-  styles              = [styles]    if !Array.isArray(styles)
+  if not Array.isArray(variables) then variables = [variables]
+  if not Array.isArray(styles) then styles = [styles]
 
-  for variable in variables
-    if variable != 'default'
-      customPath = path.join(ROOT, 'styles', "variables-#{variable}.less")
+  variablePaths = [defaultVariablePath]
+  for item in variables
+    if item isnt 'default'
+      customPath = path.join ROOT, 'styles', "variables-#{item}.less"
+      if not fs.existsSync customPath
+        customPath = item
+        if not fs.existsSync customPath
+          return done new Error "#{customPath} does not exist!"
+      variablePaths.push customPath
+      sources.push customPath
 
-      done new Error("#{variable} does not exist!") if !fs.existsSync(customPath) and !fs.existsSync(variable)
-
-      variablePaths.push(customPath)
-      sources.push(customPath)
-
-  stylePaths = [];
-
-  for style in styles
-    customPath = path.join(ROOT, 'styles', "layout-#{style}.less")
-
-    done new Error("#{style} does not exist!") if !fs.existsSync(customPath) and !fs.existsSync(style)
-
-    stylePaths.push(customPath)
-    sources.push(customPath)
+  stylePaths = []
+  for item in styles
+    customPath = path.join ROOT, 'styles', "layout-#{item}.less"
+    if not fs.existsSync customPath
+      customPath = item
+      if not fs.existsSync customPath
+        return done new Error "#{customPath} does not exist!"
+    stylePaths.push customPath
+    sources.push customPath
 
   load = (filename, loadDone) ->
-    fs.readFile(filename, 'utf-8', loadDone)
+    fs.readFile filename, 'utf-8', loadDone
 
   if verbose
     console.log "Using variables #{variablePaths}"
@@ -119,10 +150,14 @@ getCss = (variables, styles, verbose, done) ->
     console.log "Checking cache #{compiledPath}"
 
   getCached key, compiledPath, sources, load, (err, css) ->
-    return done(err)       if err
-    return done(null, css) if css
+    if err then return done err
+    if css
+      if verbose then console.log 'Cached version loaded'
+      return done null, css
 
-    console.log('Not cached or out of date. Generating CSS...') if verbose
+    # Not cached, so let's create the file.
+    if verbose
+      console.log 'Not cached or out of date. Generating CSS...'
 
     tmp = ''
 
@@ -132,36 +167,50 @@ getCss = (variables, styles, verbose, done) ->
     for customPath in stylePaths
       tmp += "@import \"#{customPath}\";\n"
 
-    lessErrorHandler = (err, result) ->
-      return done msgErr('Error processing LESS -> CSS', err) if err
+    benchmark.start 'less-compile'
+    less.render tmp, compress: true, (err, result) ->
+      if err then return done(msgErr 'Error processing LESS -> CSS', err)
 
       try
         css = result.css
-        fs.writeFileSync(compiledPath, css, 'utf-8')
-      catch _error
-        return done errMsg('Error writing cached CSS to file', _error)
+        fs.writeFileSync compiledPath, css, 'utf-8'
+      catch writeErr
+        return done(errMsg 'Error writing cached CSS to file', writeErr)
+
+      benchmark.end 'less-compile'
 
       cache[key] = css
-
       done null, cache[key]
 
-    less.render tmp, { compress: true }, lessErrorHandler
-
 compileTemplate = (filename, options) ->
-  "var jade = require('jade/runtime');\n#{jade.compileFileClient(filename, options)}\nmodule.exports = compiledFunc;"
+  compiled = """
+    var jade = require('jade/runtime');
+    #{jade.compileFileClient filename, options}
+    module.exports = compiledFunc;
+  """
 
 getTemplate = (name, verbose, done) ->
+  # Check if this is a built-in template name
+  builtin = path.join(ROOT, 'templates', "#{name}.jade")
+  if not fs.existsSync(name) and fs.existsSync(builtin)
+    name = builtin
+
+  # Get the template function for the given path. This will load and
+  # compile the template if necessary, and cache it for future use.
   key = "template-#{name}"
 
-  return done(null, cache[key]) if cache[key]
+  # Check if it is cached in memory. If not, then we'll check the disk.
+  if cache[key] then return done null, cache[key]
 
-  compiledPath = path.join(ROOT, 'cache', "#{sha1(key)}.js")
+  # Check if it is compiled on disk and not older than the template file.
+  # If not present or outdated, then we'll need to compile it.
+  compiledPath = path.join ROOT, 'cache', "#{sha1 key}.js"
 
   load = (filename, loadDone) ->
     try
       loaded = require(filename)
-    catch _error
-      loadDone errMsg('Unable to load template', _error)
+    catch loadErr
+      return loadDone(errMsg 'Unable to load template', loadErr)
 
     loadDone null, require(filename)
 
@@ -170,349 +219,348 @@ getTemplate = (name, verbose, done) ->
     console.log "Checking cache #{compiledPath}"
 
   getCached key, compiledPath, [name], load, (err, template) ->
-    return done(err) if err
-
+    if err then return done err
     if template
-      console.log('Cached version loaded') if verbose
-      done(null, template)
+      if verbose then console.log 'Cached version loaded'
+      return done null, template
 
-    console.log('Not cached or out of date. Generating template JS...') if verbose
+    if verbose
+      console.log 'Not cached or out of date. Generating template JS...'
 
+    # We need to compile the template, then cache it. This is interesting
+    # because we are compiling to a client-side template, then adding some
+    # module-specific code to make it work here. This allows us to save time
+    # in the future by just loading the generated javascript function.
+    benchmark.start 'jade-compile'
     compileOptions =
-      filename:      name
-      name:          'compiledFunc'
-      self:          true
-      compileDebug:  false
+      filename: name
+      name: 'compiledFunc'
+      self: true
+      compileDebug: false
 
     try
-      compiled = compileTemplate(name, compileOptions)
-    catch _error
-      done errMsg('Error compiling template', _error)
+      compiled = compileTemplate name, compileOptions
+    catch compileErr
+      return done(errMsg 'Error compiling template', compileErr)
 
-    if compiled.indexOf('self.') == -1
+    if compiled.indexOf('self.') is -1
+      # Not using self, so we probably need to recompile into compatibility
+      # mode. This is slower, but keeps things working with Jade files
+      # designed for Aglio 1.x.
       compileOptions.self = false
 
       try
-        compiled = compileTemplate(name, compileOptions)
-      catch _error
-        done errMsg('Error compiling template', _error)
+        compiled = compileTemplate name, compileOptions
+      catch compileErr
+        return done(errMsg 'Error compiling template', compileErr)
 
     try
-      fs.writeFileSync(compiledPath, compiled, 'utf-8')
-    catch _error
-      done errMsg('Error writing cached template file', _error)
+      fs.writeFileSync compiledPath, compiled, 'utf-8'
+    catch writeErr
+      return done(errMsg 'Error writing cached template file', writeErr)
+
+    benchmark.end 'jade-compile'
 
     cache[key] = require(compiledPath)
-
     done null, cache[key]
 
-modifyUriTemplate = (templateUri, parameters) ->
-
+modifyUriTemplate = (templateUri, parameters, colorize) ->
+  # Modify a URI template to only include the parameter names from
+  # the given parameters. For example:
+  # URI template: /pages/{id}{?verbose}
+  # Parameters contains a single `id` parameter
+  # Output: /pages/{id}
   parameterValidator = (b) ->
-    parameters.indexOf(querystring.unescape(b.replace(/^\*|\*$/, ''))) != -1
-
-  parameters = parameters.map (param) -> param.name
-
+    # Compare the names, removing the special `*` operator
+    parameterNames.indexOf(
+      querystring.unescape b.replace(/^\*|\*$/, '')) isnt -1
+  parameterNames = (param.name for param in parameters)
   parameterBlocks = []
-  lastIndex       = 0
-  index           = 0
-
-  while (index = templateUri.indexOf("{", index)) != -1
-
+  lastIndex = index = 0
+  while (index = templateUri.indexOf("{", index)) isnt - 1
     parameterBlocks.push templateUri.substring(lastIndex, index)
     block = {}
     closeIndex = templateUri.indexOf("}", index)
-
-    block.querySet    = templateUri.indexOf("{?", index) == index
-    block.formSet     = templateUri.indexOf("{&", index) == index
-    block.reservedSet = templateUri.indexOf("{+", index) == index
-    lastIndex         = closeIndex + 1
-
+    block.querySet = templateUri.indexOf("{?", index) is index
+    block.formSet = templateUri.indexOf("{&", index) is index
+    block.reservedSet = templateUri.indexOf("{+", index) is index
+    lastIndex = closeIndex + 1
     index++
-    index++ if block.querySet
-
-    parameterSet     = templateUri.substring(index, closeIndex)
-    block.parameters = parameterSet.split(",")
-                                   .filter(parameterValidator)
-
-    parameterBlocks.push(block) if (block.parameters.length)
-
+    index++ if block.querySet or block.formSet or block.reservedSet
+    parameterSet = templateUri.substring(index, closeIndex)
+    block.parameters = parameterSet.split(",").filter(parameterValidator)
+    parameterBlocks.push block if block.parameters.length
   parameterBlocks.push templateUri.substring(lastIndex, templateUri.length)
-
-  reduceUri = (uri, v) ->
-    if typeof v == "string"
-      uri.push(v);
+  parameterBlocks.reduce((uri, v) ->
+    if typeof v is "string"
+      uri.push v
     else
-      segment = ["{"]
-      segment.push("?") if v.querySet
-      segment.push("&") if v.formSet
-      segment.push("+") if v.reservedSet
-
-      segment.push(v.parameters.join())
-      segment.push("}")
-
-      uri.push(segment.join(""))
-
+      segment = if not colorize then ["{"] else []
+      segment.push "?" if v.querySet
+      segment.push "&" if v.formSet
+      segment.push "+" if v.reservedSet and not colorize
+      segment.push v.parameters.map((name) ->
+        if not colorize then name else
+          # TODO: handle errors here?
+          name = name.replace(/^\*|\*$/, '')
+          param = parameters[parameterNames.indexOf(querystring.unescape name)]
+          if v.querySet or v.formSet
+            "<span class=\"hljs-attribute\">#{name}=</span>" +
+              "<span class=\"hljs-literal\">#{param.example || ''}</span>"
+          else
+            "<span class=\"hljs-attribute\" title=\"#{name}\">#{
+              param.example || name}</span>"
+        ).join(if colorize then '&' else ',')
+      if not colorize
+        segment.push "}"
+      uri.push segment.join("")
     uri
+  , []).join('').replace(/\/+/g, '/').replace(/\/$/, '')
 
-  parameterBlocks.reduce(reduceUri, [])
-                 .join('')
-                 .replace(/\/+/g, '/')
-                 .replace(/\/$/, '')
+decorate = (api, md, slugCache, verbose) ->
+  # Decorate an API Blueprint AST with various pieces of information that
+  # will be useful for the theme. Anything that would significantly
+  # complicate the Jade template should probably live here instead!
 
-decoratePayload = (payload) ->
-  results  = []
+  # Use the slug caching mechanism
+  slugify = slug.bind slug, slugCache
 
-  payload.hasContent = payload.description ||
-                       Object.keys(payload.headers).length ||
-                       payload.body ||
-                       payload.schema
+  # Find data structures. This is a temporary workaround until Drafter is
+  # updated to support JSON Schema again.
+  # TODO: Remove me when Drafter is released.
+  dataStructures = {}
+  for category in api.content or []
+    for item in category.content or []
+      if item.element is 'dataStructure'
+        dataStructure = item.content[0]
+        dataStructures[dataStructure.meta.id] = dataStructure
+  if verbose
+    console.log "Known data structures: #{Object.keys(dataStructures)}"
 
-  try
-    payload.body   = JSON.stringify(JSON.parse(payload.body), null, 2)   if payload.body
-    payload.schema = JSON.stringify(JSON.parse(payload.schema), null, 2) if payload.schema
-  catch _error
-    payload
-
-  payload
-
-decoratePayloads = (payloads, example) ->
-  results  = []
-
-  results.push(decoratePayload(payload)) for payload in payloads
-
-  results
-
-decorateExample = (example) ->
-  for payload in ['requests', 'responses']
-    example[payload] = decoratePayloads(example[payload] || [], example)
-
-  example
-
-decorateParameters = (parameters, parent_resource) ->
-  results         = []
-  knownParameters = {}
-  parameters      = if !parameters || !parameters.length
-                      parent_resource.parameters
-                    else if parent_resource.parameters
-                      parent_resource.parameters.concat(parameters)
-
-  reversedParams  = (parameters || []).concat([]).reverse()
-
-  for parameter in reversedParams
-    continue if knownParameters[parameter.name]
-
-    knownParameters[parameter.name] = true
-
-    results.push(parameter)
-
-  results.reverse()
-
-buildAttribute = (attribute) ->
-  values = attribute?.content?.value?.content || []
-  type   = attribute?.content?.value?.element || ''
-
-  decoratedAttribute =
-    name:         attribute?.content?.key?.content || '',
-    type:         type,
-    required:     (attribute?.attributes?.typeAttributes.indexOf('required') != -1),
-    default:      attribute?.content?.value?.attributes?.default?[0]?.content || '',
-    description:  attribute?.meta?.description,
-
-  switch type
-    when 'object'
-      decoratedAttribute.example = ''
-      decoratedAttribute.values  = values.map((attribute) -> buildAttribute(attribute))
-    when 'enum'
-      decoratedAttribute.example = attribute?.content?.value?.attributes?.samples?[0]?[0]?.content
-      decoratedAttribute.values  = values.map((value) -> { value: value.content })
-    else
-      decoratedAttribute.example = attribute?.content?.value?.content || ''
-      decoratedAttribute.values  = []
-
-  decoratedAttribute
-
-decorateAttributes = (action, parent_resource) ->
-  results            = []
-  knownAttributes    = []
-  actionAttributes   = action?.content?[0]?.content?[0]?.content || []
-  resourceAttributes = parent_resource?.content?[0]?.content?[0]?.content || []
-  attributes         =  if !actionAttributes.length
-                          resourceAttributes
-                        else if resourceAttributes.length
-                          resourceAttributes.concat(actionAttributes)
-                        else
-                          []
-
-  for attribute in attributes
-    decoratedAttribute = buildAttribute(attribute)
-
-    continue if knownAttributes[decoratedAttribute.name]
-
-    knownAttributes[decoratedAttribute.name] = true
-
-    results.push(decoratedAttribute)
-
-  results
-
-decorateAction = (action, resource, resourceGroup) ->
-  results            = []
-  action.elementId   = slugify(resourceGroup.name + "-" + resource.name + "-" + action.method, true);
-  action.elementLink = "#" + action.elementId;
-  action.methodLower = action.method.toLowerCase();
-  action.parameters  = decorateParameters(action.parameters, resource)
-  action.attributes  = decorateAttributes(action, resource)
-  action.uriTemplate = modifyUriTemplate((action.attributes || {}).uriTemplate || resource.uriTemplate || '', action.parameters);
-
-  results.push decorateExample(example) for example in action.examples
-
-  action.examples = results
-
-  action
-
-decorateResource =  (resource, resourceGroup) ->
-  resource.elementId   = slugify "#{resourceGroup.name}-#{resource.name}", true
-  resource.elementLink = "#" + resource.elementId
-  actions              = resource.actions || []
-  results              = []
-
-  results.push decorateAction(action, resource, resourceGroup) for action in actions
-
-  resource.actions = results
-
-  resource
-
-decorateResourceGroup = (resourceGroup) ->
-  resources = resourceGroup.resources || []
-  results   = []
-
-  results.push decorateResource(resource, resourceGroup) for resource in resources
-
-  resourceGroup.resources = results
-
-  resourceGroup
-
-decorateResourceGroups = (resourceGroups) ->
-  results = []
-
-  results.push decorateResourceGroup(resourceGroup) for resourceGroup in resourceGroups
-
-  results
-
-decorate = (api, md, slugCache) ->
-  slugify = slug.bind(slug, slugCache)
-  results = []
-
+  # API overview description
   if api.description
-    api.descriptionHtml = md.render(api.description)
-    api.navItems        = slugCache._nav
-    slugCache._nav      = []
+    api.descriptionHtml = md.render api.description
+    api.navItems = slugCache._nav
+    slugCache._nav = []
 
-  results.push decorateResourceGroups(api.resourceGroups || [])
+  for meta in api.metadata or []
+    if meta.name is 'HOST'
+      api.host = meta.value
 
-  results
+  for resourceGroup in api.resourceGroups or []
+    # Element ID and link
+    resourceGroup.elementId = slugify resourceGroup.name, true
+    resourceGroup.elementLink = "##{resourceGroup.elementId}"
 
+    # Description
+    if resourceGroup.description
+      resourceGroup.descriptionHtml = md.render resourceGroup.description
+      resourceGroup.navItems = slugCache._nav
+      slugCache._nav = []
+
+    for resource in resourceGroup.resources or []
+      # Element ID and link
+      resource.elementId = slugify(
+        "#{resourceGroup.name}-#{resource.name}", true)
+      resource.elementLink = "##{resource.elementId}"
+
+      for action in resource.actions or []
+        # Element ID and link
+        action.elementId = slugify(
+          "#{resourceGroup.name}-#{resource.name}-#{action.method}", true)
+        action.elementLink = "##{action.elementId}"
+
+        # Lowercase HTTP method name
+        action.methodLower = action.method.toLowerCase()
+
+        # Parameters may be defined on the action or on the
+        # parent resource. Resource parameters should be concatenated
+        # to the action-specific parameters if set.
+        if not (action.attributes or {}).uriTemplate
+          if not action.parameters or not action.parameters.length
+            action.parameters = resource.parameters
+          else if resource.parameters
+            action.parameters = resource.parameters.concat(action.parameters)
+
+        # Remove any duplicates! This gives precedence to the parameters
+        # defined on the action.
+        knownParams = {}
+        newParams = []
+        reversed = (action.parameters or []).concat([]).reverse()
+        for param in reversed
+          if knownParams[param.name] then continue
+          knownParams[param.name] = true
+          newParams.push param
+
+        action.parameters = newParams.reverse()
+
+        # Set up the action's template URI
+        action.uriTemplate = modifyUriTemplate(
+          (action.attributes or {}).uriTemplate or resource.uriTemplate or '',
+          action.parameters)
+
+        action.colorizedUriTemplate = modifyUriTemplate(
+          (action.attributes or {}).uriTemplate or resource.uriTemplate or '',
+          action.parameters, true)
+
+        # Examples have a content section only if they have a
+        # description, headers, body, or schema.
+        action.hasRequest = false
+        for example in action.examples or []
+          for name in ['requests', 'responses']
+            for item in example[name] or []
+              if name is 'requests' and not action.hasRequest
+                action.hasRequest = true
+
+              # If there is no schema, but there are MSON attributes, then try
+              # to generate the schema. This will fail sometimes.
+              # TODO: Remove me when Drafter is released.
+              if not item.schema and item.content
+                for dataStructure in item.content
+                  if dataStructure.element is 'dataStructure'
+                    try
+                      schema = renderSchema(
+                        dataStructure.content[0], dataStructures)
+                      schema['$schema'] =
+                        'http://json-schema.org/draft-04/schema#'
+                      item.schema = JSON.stringify(schema, null, 2)
+                    catch err
+                      if verbose
+                        console.log(
+                          JSON.stringify dataStructure.content[0], null, 2)
+                        console.log(err)
+
+              if item.content and not process.env.DRAFTER_EXAMPLES
+                for dataStructure in item.content
+                  if dataStructure.element is 'dataStructure'
+                    try
+                      item.body = JSON.stringify(renderExample(
+                        dataStructure.content[0], dataStructures), null, 2)
+                    catch err
+                      if verbose
+                        console.log(
+                          JSON.stringify dataStructure.content[0], null, 2)
+                        console.log(err)
+
+              item.hasContent = item.description or \
+                                Object.keys(item.headers).length or \
+                                item.body or \
+                                item.schema
+
+              # If possible, make the body/schema pretty
+              try
+                if item.body
+                  item.body = JSON.stringify(JSON.parse(item.body), null, 2)
+                if item.schema
+                  item.schema = JSON.stringify(JSON.parse(item.schema), null, 2)
+              catch err
+                false
+
+# Get the theme's configuration, used by Aglio to present available
+# options and confirm that the input blueprint is a supported
+# version.
 exports.getConfig = ->
   formats: ['1A']
   options: [
-      name:         'variables',
-      description:  'Color scheme name or path to custom variables'
-      default:      'default'
-    ,
-      name:         'condense-nav',
-      description:  'Condense navigation links',
-      boolean:      true,
-      default:      true
-    ,
-      name:         'full-width',
-      description:  'Use full window width',
-      boolean:      true,
-      default:      false
-    ,
-      name:         'template',
-      description:  'Template name or path to custom template',
-      default:      'default'
-    ,
-      name:         'style',
-      description: 'Layout style name or path to custom stylesheet'
+    {name: 'variables',
+    description: 'Color scheme name or path to custom variables',
+    default: 'default'},
+    {name: 'condense-nav', description: 'Condense navigation links',
+    boolean: true, default: true},
+    {name: 'full-width', description: 'Use full window width',
+    boolean: true, default: false},
+    {name: 'template', description: 'Template name or path to custom template',
+    default: 'default'},
+    {name: 'style',
+    description: 'Layout style name or path to custom stylesheet'},
+    {name: 'emoji', description: 'Enable support for emoticons',
+    boolean: true, default: true}
   ]
 
+# Render the blueprint with the given options using Jade and LESS
 exports.render = (input, options, done) ->
-  unless done?
-    done    = options
+  if not done?
+    done = options
     options = {}
 
-  cache                    = {}                  if process.env.NOCACHE?
-  options.themeCondenseNav = options.condenseNav if options.condenseNav?
-  options.themeFullWidth   = options.fullWidth   if options.fullWidth?
-  options.themeVariables   = 'default'           unless options.themeVariables?
-  options.themeStyle       = 'default'           unless options.themeStyle?
-  options.themeTemplate    = 'default'           unless options.themeTemplate?
-  options.themeCondenseNav = true                unless options.themeCondenseNav?
-  options.themeFullWidth   = false               unless options.themeFullWidth?
+  # Disable the template/css caching?
+  if process.env.NOCACHE then cache = {}
 
-  options.themeTemplate    = path.join(ROOT, 'templates', 'index.jade') if options.themeTemplate is 'default'
+  # This is purely for backward-compatibility
+  if options.condenseNav then options.themeCondenseNav = options.condenseNav
+  if options.fullWidth then options.themeFullWidth = options.fullWidth
 
+  # Setup defaults
+  options.themeVariables ?= 'default'
+  options.themeStyle ?= 'default'
+  options.themeTemplate ?= 'default'
+  options.themeCondenseNav ?= true
+  options.themeFullWidth ?= false
+
+  # Transform built-in layout names to paths
+  if options.themeTemplate is 'default'
+    options.themeTemplate = path.join ROOT, 'templates', 'index.jade'
+
+  # Setup markdown with code highlighting and smartypants. This also enables
+  # automatically inserting permalinks for headers.
   slugCache =
     _nav: []
+  md = markdownIt(
+    html: true
+    linkify: true
+    typographer: true
+    highlight: highlight
+  ).use(require('markdown-it-anchor'),
+    slugify: (value) ->
+      output = "header-#{slug(slugCache, value, true)}"
+      slugCache._nav.push [value, "##{output}"]
+      return output
+    permalink: true
+    permalinkClass: 'permalink'
+  ).use(require('markdown-it-checkbox')
+  ).use(require('markdown-it-container'), 'note'
+  ).use(require('markdown-it-container'), 'warning')
 
-  md = markdownIt
-         html:         true
-         linkify:      true
-         typographer:  true
-         highlight:    highlight
+  if options.themeEmoji then md.use require('markdown-it-emoji')
 
-  md.use(require('markdown-it-checkbox'))
-    .use(require('markdown-it-container'), 'note')
-    .use(require('markdown-it-container'), 'warning')
-    .use(require('markdown-it-emoji'))
-    .use(require('markdown-it-anchor'),
-      slugify: (value) ->
-        output = "header-#{slug(slugCache, value, true)}"
-        slugCache._nav.push([value, "#" + output])
+  # Enable code highlighting for unfenced code blocks
+  md.renderer.rules.code_block = md.renderer.rules.fence
 
-        output
-      permalink:       true,
-      permalinkClass: 'permalink'
-    )
+  benchmark.start 'decorate'
+  decorate input, md, slugCache, options.verbose
+  benchmark.end 'decorate'
 
-  md.renderer.rules.code_clock = md.renderer.rules.fence
-
-  decorate(input, md, slugCache)
-
-  themeVariables = options.themeVariables
-  themeStyle     = options.themeStyle
-  verbose        = options.verbose
-
+  benchmark.start 'css-total'
+  {themeVariables, themeStyle, verbose} = options
   getCss themeVariables, themeStyle, verbose, (err, css) ->
-    return done(errMsg('Could not get CSS', err)) if err
+    if err then return done(errMsg 'Could not get CSS', err)
+    benchmark.end 'css-total'
 
     locals =
-      api:          input
-      condenseNav:  options.themeCondenseNav
-      css:          css
-      fullWidth:    options.themeFullWidth
-      date:         moment
-      hash:         (value) -> crypto.createHash('md5').update(value.toString()).digest('hex')
-      highlight:    highlight,
-      markdown:     (content) -> md.render(content)
-      slug:         slug.bind(slug, slugCache)
-      urldec:       (value) -> querystring.unescape(value)
+      api: input
+      condenseNav: options.themeCondenseNav
+      css: css
+      fullWidth: options.themeFullWidth
+      date: moment
+      hash: (value) ->
+        crypto.createHash('md5').update(value.toString()).digest('hex')
+      highlight: highlight
+      markdown: (content) -> md.render content
+      slug: slug.bind(slug, slugCache)
+      urldec: (value) -> querystring.unescape(value)
 
-    ref = options.locals || {}
-
-    for key in ref
-      value       = ref[key]
+    for key, value of options.locals or {}
       locals[key] = value
 
+    benchmark.start 'get-template'
     getTemplate options.themeTemplate, verbose, (getTemplateErr, renderer) ->
-      return done(errMsg('Could not get template', getTemplateErr)) if getTemplateErr
+      if getTemplateErr
+        return done(errMsg 'Could not get template', getTemplateErr)
+      benchmark.end 'get-template'
 
-      try
-        html = renderer locals
-      catch _error
-        done(errMsg('Error calling template during rendering', _error))
-
-      done(null, html)
-
- module.exports = exports
+      benchmark.start 'call-template'
+      try html = renderer locals
+      catch err
+        return done(errMsg 'Error calling template during rendering', err)
+      benchmark.end 'call-template'
+      done null, html

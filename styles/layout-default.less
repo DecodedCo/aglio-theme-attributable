@@ -2,9 +2,7 @@
 body {
   color: @text-color;
   background: @background-color;
-  font-family: @base-font;
-  font-size: @font-size;
-  line-height: 1.42;
+  font: @base-font;
 }
 
 header {
@@ -17,7 +15,7 @@ h1, h2, h3, h4, h5 {
     margin: @padding 0;
 
     & .permalink {
-        margin-left: @padding / 2;
+        margin-left: 0;
         opacity: 0;
         transition: opacity 0.25s ease;
     }
@@ -25,18 +23,29 @@ h1, h2, h3, h4, h5 {
     &:hover .permalink {
         opacity: 1;
     }
+
+    // Chrome makes the *text* disappear after hover rather than the permalink
+    // itself... weird bug so we're disabling the fading for now. The key
+    // to the issue is the `position: relative` on the `.triple .content`
+    // container (disabling that rule fixes the problem, hence why it works
+    // in the two-column theme).
+    .triple & .permalink {
+        opacity: 0.15;
+    }
+
+    .triple &:hover .permalink {
+        opacity: 0.15;
+    }
 }
 
 h1 {
-    font-family: @title-font;
+    font: @title-font;
     font-size: 36px;
-    font-weight: 500;
 }
 
 h2 {
-    font-family: @title-font;
+    font: @title-font;
     font-size: 30px;
-    font-weight: 500;
 }
 
 h3 {
@@ -68,10 +77,19 @@ li {
     }
 }
 
+hr.split {
+    border: 0;
+    height: 1px;
+    width: 100%;
+    padding-left: @padding / 2;
+    margin: @padding auto;
+    background-image: linear-gradient(to right, fade(@text-color, 0%) 20%, fade(@text-color, 20%) 100% - @right-panel-background-width, fade(@right-text-color, 20%) 100% - @right-panel-background-width, fade(@right-text-color, 0%) 80%);
+}
+
 dl {
     dt {
         float: left;
-        width: 160px;
+        width: 130px;
         clear: left;
         text-align: right;
         overflow: hidden;
@@ -81,7 +99,7 @@ dl {
     }
 
     dd {
-        margin-left: 180px;
+        margin-left: 150px;
     }
 }
 
@@ -105,6 +123,7 @@ pre {
     overflow: auto;
 
     code {
+        color: @code-block-text-color;
         background-color: transparent;
         padding: 0;
         border: none;
@@ -114,7 +133,7 @@ pre {
 code {
     color: @inline-code-text-color;
     background-color: @inline-code-background-color;
-    font-family: @code-font;
+    font: @code-font;
     padding: 1px 4px;
     border: 1px solid @code-block-border-color;
     border-radius: 3px;
@@ -130,13 +149,17 @@ table {
   margin-bottom: @padding;
 
   tr:nth-child(2n) {
-    background-color: darken(@group-background-color, 2%);
+    background-color: @table-row-background-color;
   }
 
   th, td {
     padding: @padding/2 @padding;
-    border: 1px solid @group-border-color;
+    border: 1px solid @table-border-color;
   }
+}
+
+.text-muted {
+  opacity: 0.5;
 }
 
 .note, .warning {
@@ -176,6 +199,10 @@ table {
   }
 }
 
+header {
+    margin-top: @padding * 2;
+}
+
 nav {
     position: fixed;
     top: @padding * 2;
@@ -203,7 +230,9 @@ nav {
           margin: 0;
 
           &:hover {
-            border-left: 2px solid @text-color;
+            text-decoration: @nav-hover-text-decoration;
+            background-color: @nav-hover-background-color;
+            border-left: 2px solid @nav-hover-border-color;
           }
         }
       }
@@ -225,7 +254,9 @@ nav {
             white-space: nowrap;
 
             &:hover {
-                border-left: 2px solid @text-color;
+              text-decoration: @nav-hover-text-decoration;
+              background-color: @nav-hover-background-color;
+              border-left: 2px solid @nav-hover-border-color;
             }
         }
 
@@ -291,8 +322,7 @@ nav {
     color: @group-text-color;
     background-color: @group-title-background-color;
     border-radius: 10px;
-    margin-top: -2px;
-    margin-bottom: -2px;
+    margin: @badge-margin;
 
     &.get {
       color: @get-badge-text-color;
@@ -363,7 +393,7 @@ nav {
 
 /* Layout classes */
 nav {
-    width: 220px;
+    width: @nav-width;
 }
 
 .container {
@@ -373,7 +403,7 @@ nav {
 
     .row {
         .content {
-            margin-left: 220px + (@padding * 2);
+            margin-left: @nav-width + (@padding * 2);
             width: 720px - (@padding * 2);
         }
 
@@ -393,14 +423,173 @@ nav {
     .row {
         .content {
             margin-left: 24%;
-            width: 76%;
+        }
+    }
+
+    &.triple {
+        nav {
+            width: @nav-triple-width;
+            padding-right: 1px;
+        }
+
+        .row .content {
+            position: relative;
+            margin-left: @nav-triple-width;
+            padding-left: @padding * 2;
         }
     }
 }
 
+.middle:before, .middle:after {
+    content: '';
+    display: table;
+}
+
+.middle:after {
+    clear: both;
+}
+
+.middle {
+    box-sizing: border-box;
+    width: 100% - @right-panel-width;
+    padding-right: @padding;
+}
+
+.right {
+    box-sizing: border-box;
+    float: right;
+    width: @right-panel-width;
+    padding-left: @padding;
+
+    a {
+        color: @right-link-color;
+    }
+
+    h1, h2, h3, h4, h5, p, div {
+        color: @right-text-color;
+    }
+
+    pre {
+        background-color: @right-code-block-background-color;
+        border: 1px solid @right-code-block-border-color;
+
+        code {
+            color: @right-code-block-text-color;
+        }
+    }
+
+    .description {
+        margin-top: @padding;
+    }
+}
+
+.triple .resource-heading {
+  font-size: 125%;
+}
+
+.definition {
+  margin-top: @padding;
+  margin-bottom: @padding;
+
+  .method {
+    font-weight: bold;
+
+    &.get {
+      color: hsl(hue(@get-background-color), 60%, 45%);
+    }
+
+    &.head {
+      color: hsl(hue(@head-background-color), 60%, 45%);
+    }
+
+    &.options {
+      color: hsl(hue(@options-background-color), 60%, 45%);
+    }
+
+    &.post {
+      color: hsl(hue(@post-background-color), 60%, 45%);
+    }
+
+    &.put {
+      color: hsl(hue(@put-background-color), 60%, 45%);
+    }
+
+    &.patch {
+      color: hsl(hue(@patch-background-color), 60%, 45%);
+    }
+
+    &.delete {
+      color: hsl(hue(@delete-background-color), 60%, 45%);
+    }
+  }
+
+  .uri {
+    word-break: break-all;
+    word-wrap: break-word;
+  }
+
+  .hostname {
+      opacity: 0.5;
+  }
+}
+
+.example-names {
+  background-color: @tabs-background-color;
+  padding: @padding;
+  border-radius: @border-radius;
+
+  .tab-button {
+    cursor: pointer;
+    color: @text-color;
+    border: 1px solid @tabs-border-color;
+    padding: @padding / 2;
+    margin-left: @padding;
+
+    &.active {
+      background-color: @tabs-active-background-color;
+    }
+  }
+}
+
+.right .example-names {
+  background-color: @right-tabs-background-color;
+
+  .tab-button {
+    color: @right-text-color;
+    border: 1px solid @right-tabs-border-color;
+    border-radius: @border-radius;
+
+    &.active {
+      background-color: @right-tabs-active-background-color;
+    }
+  }
+}
+
+#nav-background {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: @nav-triple-width;
+    padding-right: @padding * 1.2;
+    background-color: @nav-background-color;
+    border-right: 1px solid @nav-border-color;
+    z-index: -1;
+}
+
+#right-panel-background {
+    position: absolute;
+    right: -@padding;
+    top: -@padding;
+    bottom: -@padding;
+    width: @right-panel-background-width;
+    background-color: @right-background-color;
+    z-index: -1;
+}
+
 @media (max-width: 1200px) {
     nav {
-        width: 200px;
+        width: @nav-width * 0.9;
     }
 
     .container {
@@ -417,7 +606,7 @@ nav {
 
 @media (max-width: 992px) {
     nav {
-        width: 170px;
+        width: @nav-width * 0.77;
     }
 
     .container {
@@ -442,12 +631,20 @@ nav {
         max-width: none;
     }
 
-    .container .row, .container-fluid .row {
+    .container .row, .container-fluid .row, .container-fluid.triple .row {
         .content {
             margin-left: auto;
             margin-right: auto;
             width: 95%;
         }
+    }
+
+    #nav-background {
+      display: none;
+    }
+
+    #right-panel-background {
+      width: @right-panel-background-width;
     }
 }
 
@@ -469,15 +666,15 @@ nav {
 }
 
 .resource-group {
-    padding: @padding;
+    padding: @group-padding;
     margin-bottom: @padding;
     background-color: @group-background-color;
     border: 1px solid @group-border-color;
     border-radius: @border-radius;
 
     h2.group-heading, .heading a {
-        padding: @padding;
-        margin: -@padding -@padding @padding -@padding;
+        padding: @group-padding;
+        margin: @group-header-margin;
         background-color: @group-title-background-color;
         border-bottom: 1px solid @group-border-color;
         border-top-left-radius: @border-radius;
@@ -489,8 +686,19 @@ nav {
     }
 }
 
+.triple .content .resource-group {
+    padding: 0;
+    border: none;
+
+    h2.group-heading, .heading a {
+        margin: 0 0 @padding 0;
+        border: 1px solid @group-border-color;
+    }
+}
+
 nav .resource-group{
   .heading a {
+    padding: @padding;
     margin-bottom: 0;
   }
 
@@ -525,7 +733,7 @@ nav .resource-group{
         .method {
             padding: @padding / 2 @padding;
             margin-right: @padding;
-            border-radius: 3px;
+            border-radius: ceil(@border-radius / 2);
 
             &.get {
                 color: contrast(@get-color);
