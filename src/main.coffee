@@ -10,6 +10,7 @@ querystring = require 'querystring'
 
 renderExample = require './example'
 renderSchema = require './schema'
+renderAttributes = require './attribute'
 
 # The root directory of this project
 ROOT = path.dirname __dirname
@@ -416,8 +417,9 @@ decorate = (api, md, slugCache, verbose) ->
                 if dataStructure.element is 'dataStructure'
                   try
                     item.attributes =
-                      renderSchema(dataStructure.content[0], dataStructures)
+                      renderAttributes(dataStructure.content[0], dataStructures)
                   catch err
+                    debugger
                     if verbose
                       console.log(dataStructure.content[0])
                       console.log(err)
@@ -538,7 +540,10 @@ exports.render = (input, options, done) ->
   md.renderer.rules.code_block = md.renderer.rules.fence
 
   benchmark.start 'decorate'
-  decorate input, md, slugCache, options.verbose
+  try decorate input, md, slugCache, options.verbose
+  catch err
+    debugger
+    return done(errMsg 'Error during template compliation', err)
   benchmark.end 'decorate'
 
   benchmark.start 'css-total'
