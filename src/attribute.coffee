@@ -26,7 +26,7 @@ module.exports = renderAttributes = (root, dataStructures) ->
         attributes.default = root.attributes.default
     when 'enum'
       attributes.values = []
-      attributes.type = 'enum'
+      attributes.type = 'string'
       for item in root.content or []
         attributes.values.push item.content
     when 'array'
