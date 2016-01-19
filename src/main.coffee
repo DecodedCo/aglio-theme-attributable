@@ -10,7 +10,6 @@ querystring = require 'querystring'
 
 renderExample = require './example'
 renderSchema = require './schema'
-renderAttributes = require './attribute'
 
 # The root directory of this project
 ROOT = path.dirname __dirname
@@ -413,18 +412,6 @@ decorate = (api, md, slugCache, verbose) ->
               if name is 'requests' and not action.hasRequest
                 action.hasRequest = true
 
-              for dataStructure in item.content
-                if dataStructure.element is 'dataStructure'
-                  try
-                    item.attributes =
-                      renderAttributes(dataStructure.content[0], dataStructures)
-                  catch err
-                    debugger
-                    if verbose
-                      console.log(dataStructure.content[0])
-                      console.log(err)
-                      console.log("Testing")
-
               # If there is no schema, but there are MSON attributes, then try
               # to generate the schema. This will fail sometimes.
               # TODO: Remove me when Drafter is released.
@@ -540,10 +527,7 @@ exports.render = (input, options, done) ->
   md.renderer.rules.code_block = md.renderer.rules.fence
 
   benchmark.start 'decorate'
-  try decorate input, md, slugCache, options.verbose
-  catch err
-    debugger
-    return done(errMsg 'Error during template compliation', err)
+  decorate input, md, slugCache, options.verbose
   benchmark.end 'decorate'
 
   benchmark.start 'css-total'
