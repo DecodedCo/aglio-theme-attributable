@@ -10,6 +10,7 @@ querystring = require 'querystring'
 
 renderExample = require './example'
 renderSchema = require './schema'
+renderAttributes = require './attribute'
 
 # The root directory of this project
 ROOT = path.dirname __dirname
@@ -405,12 +406,41 @@ decorate = (api, md, slugCache, verbose) ->
 
         # Examples have a content section only if they have a
         # description, headers, body, or schema.
-        action.hasRequest = false
+        action.hasRequest        = false
+        action.requestAttributes = []
+
+        action.hasResponse        = false
+        action.responseAttributes = []
+
         for example in action.examples or []
           for name in ['requests', 'responses']
             for item in example[name] or []
               if name is 'requests' and not action.hasRequest
+                if item.content
+                  for dataStructure in item.content
+                    if dataStructure.element is 'dataStructure'
+                      try
+                        action.requestAttributes = renderAttributes(dataStructure.content[0], dataStructures).properties
+                      catch err
+                        if verbose
+                          console.log(dataStructure.content[0])
+                          console.log(err)
+
                 action.hasRequest = true
+
+              if name is 'responses' and not action.hasResponse
+                if item.content
+                  for dataStructure in item.content
+                    if dataStructure.element is 'dataStructure'
+                      try
+                        action.responseAttributes = renderAttributes(dataStructure.content[0], dataStructures).properties
+                      catch err
+                        if verbose
+                          console.log(dataStructure.content[0])
+                          console.log(err)
+
+                action.hasResponse = true
+
 
               # If there is no schema, but there are MSON attributes, then try
               # to generate the schema. This will fail sometimes.
