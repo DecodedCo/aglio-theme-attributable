@@ -51,5 +51,5 @@ module.exports = (base, element) ->
         uniqueMembers combined.content
     else
       # Not an array or object, just overwrite the content
-      combine.content = element.content
+      combined.content = element.content
   combined
